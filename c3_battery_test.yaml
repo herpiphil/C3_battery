@@ -1,0 +1,168 @@
+# ============================================================
+# 2026-04-14
+# Project: C3 Battery Test
+# Initial version - ESP32-C3 SuperMini battery life and
+# charging efficiency test, controlled from Home Assistant.
+#
+# IMPORTANT: GPIO1 assumed for battery ADC - confirm against
+# your expansion board schematic or markings.
+#
+# IMPORTANT: multiply: 2.0 assumes a 1:1 voltage divider
+# (e.g. 100k/100k). Adjust if your board uses a different ratio.
+# ============================================================
+
+substitutions:
+  name: c3-battery-test
+  friendly_name: C3 Battery Test
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  includes:
+    - wifi_ps_helper.h
+  on_boot:
+    priority: -100   # runs after WiFi is connected
+    then:
+      - lambda: |-
+          // Restore WiFi power save preference across reboots and wake cycles
+          if (id(wifi_ps_pref) == 1) {
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+          } else if (id(wifi_ps_pref) == 2) {
+            esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+          } else {
+            esp_wifi_set_ps(WIFI_PS_NONE);
+          }
+      - delay: 40s    # allow time for first sensor readings to be sent
+      - script.execute: handle_sleep_mode
+
+esp32:
+  board: esp32-c3-devkitm-1   # compatible with ESP32-C3 SuperMini
+  framework:
+    type: arduino
+
+logger:
+  level: INFO
+
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret ap_password
+
+captive_portal:
+
+# ── Persistent globals ────────────────────────────────────────
+globals:
+  - id: wifi_ps_pref
+    type: int
+    restore_value: true
+    initial_value: '0'    # 0=full power  1=light save  2=max save
+
+# ── Sensors ──────────────────────────────────────────────────
+sensor:
+
+  - platform: adc
+    pin: GPIO1              # *** CONFIRM THIS PIN FOR YOUR BOARD ***
+    name: "Battery Voltage"
+    id: battery_voltage
+    update_interval: 60s
+    attenuation: 12db
+    filters:
+      - multiply: 2.0       # *** ADJUST FOR YOUR VOLTAGE DIVIDER RATIO ***
+    unit_of_measurement: V
+    accuracy_decimals: 3
+    device_class: voltage
+    state_class: measurement
+
+  - platform: template
+    name: "Battery Level"
+    id: battery_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    device_class: battery
+    state_class: measurement
+    update_interval: 60s
+    lambda: |-
+      float v = id(battery_voltage).state;
+      if (isnan(v)) return NAN;
+      float pct = (v - 3.0f) / (4.2f - 3.0f) * 100.0f;
+      if (pct < 0.0f) pct = 0.0f;
+      if (pct > 100.0f) pct = 100.0f;
+      return pct;
+
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+    device_class: signal_strength
+    state_class: measurement
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+    state_class: total_increasing
+
+# ── Controls (selectable from HA dashboard) ───────────────────
+select:
+
+  - platform: template
+    name: "Sleep Mode"
+    id: sleep_mode_select
+    optimistic: true
+    restore_value: true
+    initial_option: Always On
+    options:
+      - Always On
+      - Deep Sleep 30s
+      - Deep Sleep 5 min
+      - Deep Sleep 15 min
+      - Deep Sleep 1 hr
+
+  - platform: template
+    name: "WiFi Power Save"
+    id: wifi_ps_select
+    optimistic: true
+    restore_value: true
+    initial_option: Full Power
+    options:
+      - Full Power
+      - Light Save
+      - Max Save
+    set_action:
+      - lambda: |-
+          if (x == "Full Power") {
+            esp_wifi_set_ps(WIFI_PS_NONE);
+            id(wifi_ps_pref) = 0;
+          } else if (x == "Light Save") {
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+            id(wifi_ps_pref) = 1;
+          } else {
+            esp_wifi_set_ps(WIFI_PS_MAX_MODEM);
+            id(wifi_ps_pref) = 2;
+          }
+
+# ── Deep sleep component ──────────────────────────────────────
+deep_sleep:
+  id: deep_sleep_ctrl
+
+# ── Sleep logic ───────────────────────────────────────────────
+script:
+  - id: handle_sleep_mode
+    then:
+      - lambda: |-
+          std::string mode = id(sleep_mode_select).current_option();
+          if (mode == "Always On") return;   // stay awake, interval handles updates
+
+          uint32_t ms = 30000;               // default 30s
+          if (mode == "Deep Sleep 5 min")  ms = 300000;
+          if (mode == "Deep Sleep 15 min") ms = 900000;
+          if (mode == "Deep Sleep 1 hr")   ms = 3600000;
+
+          id(deep_sleep_ctrl).set_sleep_duration(ms);
+          id(deep_sleep_ctrl).begin_sleep();
