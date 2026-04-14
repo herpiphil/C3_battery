@@ -11,6 +11,8 @@
 # (e.g. 100k/100k). Adjust if your board uses a different ratio.
 #
 # 2026-04-15
+# Recalibrated ADC multiply from 8.91 to 2.02 (previous value was
+# from abnormal conditions; raw ADC now reads correctly at ~1.979V)
 # Added LD2410C 24GHz human presence sensor:
 #   UART1 on GPIO4 (TX to sensor RX) / GPIO5 (RX from sensor TX)
 #   OUT pin on GPIO3 (binary presence output)
@@ -95,7 +97,7 @@ sensor:
     attenuation: 12db
     samples: 10
     filters:
-      - multiply: 8.91      # empirically calibrated: pin 2.001V, battery 4.002V, raw ADC 0.449V
+      - multiply: 2.02       # recalibrated 2026-04-15: pin 2.001V, battery 4.002V, raw ADC 1.979V
       - sliding_window_moving_average:
           window_size: 6
           send_every: 1

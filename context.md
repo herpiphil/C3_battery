@@ -1,6 +1,6 @@
 # C3 Battery Test — Project Context
 
-## Last updated: 2026-04-14
+## Last updated: 2026-04-15
 
 ## Project Goal
 Test LiPo battery life and charging efficiency on an ESP32-C3 SuperMini using an expansion board. All test conditions are controlled from Home Assistant, with sensor data logged for analysis.
@@ -10,17 +10,24 @@ Test LiPo battery life and charging efficiency on an ESP32-C3 SuperMini using an
 - **Expansion board:** Generic SuperMini expansion board with JST battery connector, LiPo charging and protection built in
 - **Battery:** LiPo single cell (3.7V nominal)
 - **Connection:** OTA (WiFi) for firmware updates. USB port is ttyACM0 or ttyACM1 (changes after reboot)
+- **LD2410C:** 24GHz human presence sensor — wired to UART1 (GPIO4/GPIO5) and OUT pin on GPIO3
 
 ## Battery Voltage Monitoring
 - **Expansion board** has no GPIO-connected battery monitoring pin
-- **External voltage divider** added: B+ pad → 100kΩ → GPIO1 (pin 5) → 100kΩ → GND
+- **External voltage divider** added: B+ pad → 100kΩ → GPIO1 → 100kΩ → GND
 - **B+ and B- pads** found on back of expansion board PCB
-- GPIO0 (pin 4) was tried first but has a 45kΩ internal pull-down (strapping pin) that distorts ADC readings
-- GPIO1 (pin 5) confirmed working — no pull-down issue
+- GPIO0 was tried first but has a 45kΩ internal pull-down (strapping pin) that distorts ADC readings
+- GPIO1 confirmed working
 - **ADC settings:** GPIO1, attenuation 12db, samples: 10
-- **Calibration:** multiply: 8.91 (empirical — pin reads 2.001V for 4.002V battery, raw ADC 0.449V)
-- **Accuracy:** ~4% (reads 4.15V for actual 4.002V) — acceptable for trend monitoring
-- **Stability check:** reading held at 4.151V — monitoring to confirm it holds
+- **Calibration (2026-04-15):** multiply: 2.02 (pin 2.001V, battery 4.002V, raw ADC 1.979V)
+- Previous multiply of 8.91 was from abnormal conditions and has been corrected
+- **Confirmed reading:** 3.982V — accurate
+
+## LD2410C Presence Sensor
+- **Wiring:** TX→GPIO5, RX→GPIO4, OUT→GPIO3, GND→GND, 5V→5V (expansion board)
+- **UART:** 256000 baud, 8N1
+- **Sensors in HA:** Presence Detected, Moving Target, Still Target, OUT Pin (binary); Move/Still Distance, Move/Still Energy, Detection Distance (numeric)
+- **Status:** Confirmed working — all readings look appropriate
 
 ## Current Firmware State
 - File: `c3_battery_test.yaml`
@@ -29,23 +36,25 @@ Test LiPo battery life and charging efficiency on an ESP32-C3 SuperMini using an
 - Framework: Arduino
 - API encryption: removed (local network only)
 - OTA password: set in secrets.yaml
-- Sensor update interval: 10s (shortened for calibration — change to 60s once stable)
+- Sensor update interval: 10s (shorten to 60s once stable)
 
 ## Sensors Reported to Home Assistant
 - Battery Voltage (V)
 - Battery Level (%) — 0% = 3.0V, 100% = 4.2V
 - WiFi Signal (dBm)
 - Uptime (s)
+- Presence Detected, Moving Target, Still Target, OUT Pin (binary)
+- Move Distance, Still Distance, Move Energy, Still Energy, Detection Distance
 
 ## HA Controls
 - **Sleep Mode** — Always On / Deep Sleep 30s / 5min / 15min / 1hr (persists across reboots)
 - **WiFi Power Save** — Full Power / Light Save / Max Save (persists across reboots)
 
 ## Next Steps
-1. Confirm voltage reading is stable over time (currently monitoring)
-2. Change update_interval back to 60s once stability confirmed
-3. Begin battery life tests — switch sleep/WiFi modes in HA and observe discharge rate in history graphs
-4. Note: battery level % may need recalibration if voltage range drifts from 3.0-4.2V assumption
+1. Monitor voltage reading for stability
+2. Change update_interval to 60s once stable
+3. Begin battery life tests — switch sleep/WiFi modes in HA and observe discharge rate
+4. Note: deep sleep will disconnect the LD2410C — keep Sleep Mode on "Always On" when presence sensing is needed
 
 ## Files
 - `c3_battery_test.yaml` — main ESPHome config
