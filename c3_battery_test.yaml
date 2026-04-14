@@ -69,13 +69,17 @@ globals:
 sensor:
 
   - platform: adc
-    pin: GPIO1              # *** CONFIRM THIS PIN FOR YOUR BOARD ***
+    pin: GPIO1              # physical pin 5 on board - GPIO0 had 45k internal pull-down
     name: "Battery Voltage"
     id: battery_voltage
-    update_interval: 60s
+    update_interval: 10s
     attenuation: 12db
+    samples: 10
     filters:
-      - multiply: 2.0       # *** ADJUST FOR YOUR VOLTAGE DIVIDER RATIO ***
+      - multiply: 8.91      # empirically calibrated: pin 2.001V, battery 4.002V, raw ADC 0.449V
+      - sliding_window_moving_average:
+          window_size: 6
+          send_every: 1
     unit_of_measurement: V
     accuracy_decimals: 3
     device_class: voltage

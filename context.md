@@ -8,24 +8,32 @@ Test LiPo battery life and charging efficiency on an ESP32-C3 SuperMini using an
 ## Hardware
 - **MCU:** ESP32-C3 SuperMini
 - **Expansion board:** Generic SuperMini expansion board with JST battery connector, LiPo charging and protection built in
-- **Battery:** LiPo (single cell, 3.7V nominal) — not yet identified/specified
-- **Connection:** USB (dev/ttyACM0 or ttyACM1 — port number can change after reboot)
+- **Battery:** LiPo single cell (3.7V nominal)
+- **Connection:** OTA (WiFi) for firmware updates. USB port is ttyACM0 or ttyACM1 (changes after reboot)
+
+## Battery Voltage Monitoring
+- **Expansion board** has no GPIO-connected battery monitoring pin
+- **External voltage divider** added: B+ pad → 100kΩ → GPIO1 (pin 5) → 100kΩ → GND
+- **B+ and B- pads** found on back of expansion board PCB
+- GPIO0 (pin 4) was tried first but has a 45kΩ internal pull-down (strapping pin) that distorts ADC readings
+- GPIO1 (pin 5) confirmed working — no pull-down issue
+- **ADC settings:** GPIO1, attenuation 12db, samples: 10
+- **Calibration:** multiply: 8.91 (empirical — pin reads 2.001V for 4.002V battery, raw ADC 0.449V)
+- **Accuracy:** ~4% (reads 4.15V for actual 4.002V) — acceptable for trend monitoring
+- **Stability check:** reading held at 4.151V — monitoring to confirm it holds
 
 ## Current Firmware State
 - File: `c3_battery_test.yaml`
-- Flashed successfully via USB on 2026-04-14
 - ESPHome version: 2026.2.2
 - Board definition: `esp32-c3-devkitm-1`
 - Framework: Arduino
-
-## Battery ADC
-- **Assumed pin:** GPIO1 — NOT yet confirmed against board schematic
-- **Assumed divider:** 1:1 (100k/100k), multiply factor = 2.0
-- **Status:** Unconfirmed. Battery was connected showing 2.776V — possibly flat battery, possibly wrong divider ratio. Need to charge and verify reading climbs toward 4.2V.
+- API encryption: removed (local network only)
+- OTA password: set in secrets.yaml
+- Sensor update interval: 10s (shortened for calibration — change to 60s once stable)
 
 ## Sensors Reported to Home Assistant
 - Battery Voltage (V)
-- Battery Level (%)  — 0% = 3.0V, 100% = 4.2V
+- Battery Level (%) — 0% = 3.0V, 100% = 4.2V
 - WiFi Signal (dBm)
 - Uptime (s)
 
@@ -33,15 +41,11 @@ Test LiPo battery life and charging efficiency on an ESP32-C3 SuperMini using an
 - **Sleep Mode** — Always On / Deep Sleep 30s / 5min / 15min / 1hr (persists across reboots)
 - **WiFi Power Save** — Full Power / Light Save / Max Save (persists across reboots)
 
-## API / Security
-- API encryption removed for simplicity (local network only)
-- OTA password set in secrets.yaml
-
-## Known Issues / Next Steps
-1. Confirm battery ADC GPIO pin — charge battery and watch if voltage climbs to ~4.2V
-2. If voltage tops out below 4.2V, adjust `multiply` factor in YAML to match actual divider ratio
-3. Once voltage reading is confirmed correct, begin battery life tests by switching sleep/WiFi modes in HA
-4. Consider adding a multimeter check of actual battery voltage to calibrate the ADC reading
+## Next Steps
+1. Confirm voltage reading is stable over time (currently monitoring)
+2. Change update_interval back to 60s once stability confirmed
+3. Begin battery life tests — switch sleep/WiFi modes in HA and observe discharge rate in history graphs
+4. Note: battery level % may need recalibration if voltage range drifts from 3.0-4.2V assumption
 
 ## Files
 - `c3_battery_test.yaml` — main ESPHome config
