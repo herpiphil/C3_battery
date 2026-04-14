@@ -9,6 +9,12 @@
 #
 # IMPORTANT: multiply: 2.0 assumes a 1:1 voltage divider
 # (e.g. 100k/100k). Adjust if your board uses a different ratio.
+#
+# 2026-04-15
+# Added LD2410C 24GHz human presence sensor:
+#   UART1 on GPIO4 (TX to sensor RX) / GPIO5 (RX from sensor TX)
+#   OUT pin on GPIO3 (binary presence output)
+#   Baud rate 256000, 8N1
 # ============================================================
 
 substitutions:
@@ -58,6 +64,19 @@ wifi:
 
 captive_portal:
 
+# ── LD2410C UART ──────────────────────────────────────────────
+uart:
+  id: uart_ld2410
+  tx_pin: GPIO4    # → sensor RX
+  rx_pin: GPIO5    # ← sensor TX
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+
+# ── LD2410C presence sensor ───────────────────────────────────
+ld2410:
+  uart_id: uart_ld2410
+
 # ── Persistent globals ────────────────────────────────────────
 globals:
   - id: wifi_ps_pref
@@ -101,6 +120,18 @@ sensor:
       if (pct > 100.0f) pct = 100.0f;
       return pct;
 
+  - platform: ld2410
+    moving_distance:
+      name: "Presence Move Distance"
+    still_distance:
+      name: "Presence Still Distance"
+    moving_energy:
+      name: "Presence Move Energy"
+    still_energy:
+      name: "Presence Still Energy"
+    detection_distance:
+      name: "Presence Detection Distance"
+
   - platform: wifi_signal
     name: "WiFi Signal"
     update_interval: 60s
@@ -111,6 +142,23 @@ sensor:
     name: "Uptime"
     update_interval: 60s
     state_class: total_increasing
+
+# ── Binary sensors ────────────────────────────────────────────
+binary_sensor:
+
+  - platform: ld2410
+    has_target:
+      name: "Presence Detected"
+    has_moving_target:
+      name: "Presence Moving Target"
+    has_still_target:
+      name: "Presence Still Target"
+
+  - platform: gpio
+    pin:
+      number: GPIO3
+      mode: INPUT
+    name: "Presence OUT Pin"    # LD2410C OUT — high when presence detected
 
 # ── Controls (selectable from HA dashboard) ───────────────────
 select:
